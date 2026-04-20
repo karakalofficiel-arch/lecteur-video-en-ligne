@@ -285,7 +285,7 @@ export default function AdminPage() {
                         </svg>
                         <div>
                           <p className="text-kara-text text-sm">Glisser une vidéo ici</p>
-                          <p className="text-kara-muted text-xs mt-1">ou cliquer pour parcourir — MP4, WebM, MOV — max 500 Mo</p>
+                          <p className="text-kara-muted text-xs mt-1">ou cliquer pour parcourir — MP4, WebM, MOV — max 2 Go</p>
                         </div>
                       </div>
                     )}

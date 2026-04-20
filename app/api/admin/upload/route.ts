@@ -26,7 +26,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           'video/x-m4v',
           'video/x-matroska',
         ],
-        maximumSizeInBytes: 500 * 1024 * 1024, // 500 MB (Hobby limit)
+        maximumSizeInBytes: 2 * 1024 * 1024 * 1024, // 2 GB (requires Vercel Pro)
         cacheControlMaxAge: 365 * 24 * 60 * 60,  // 1 an — URLs immuables
       }),
       onUploadCompleted: async () => {
