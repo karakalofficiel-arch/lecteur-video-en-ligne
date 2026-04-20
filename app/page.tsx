@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { detectVideoKind, toEmbedUrl } from '@/lib/video'
+import { detectVideoKind, toEmbedUrl, getYoutubeId } from '@/lib/video'
+import { YoutubePlayer } from './YoutubePlayer'
 import type { VideoConfig } from '@/lib/storage'
 
 export default function KaravisionPage() {
@@ -79,17 +80,16 @@ export default function KaravisionPage() {
                     playsInline
                     className="w-full h-full object-contain"
                     title={config.title}
-                    // Allow browser to cache aggressively
                     crossOrigin="anonymous"
                   />
-
-                  {/* Buffering spinner overlay */}
                   {buffering && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                       <div className="w-12 h-12 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                     </div>
                   )}
                 </>
+              ) : kind === 'youtube' ? (
+                <YoutubePlayer videoId={getYoutubeId(config.url)} />
               ) : (
                 <iframe
                   src={embedUrl!}
