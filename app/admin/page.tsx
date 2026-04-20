@@ -118,6 +118,17 @@ export default function AdminPage() {
     await loadCurrentVideo()
   }
 
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDelete() {
+    if (!confirm('Supprimer la vidéo en ligne ? Cette action est irréversible.')) return
+    setDeleting(true)
+    const r = await fetch('/api/admin/video', { method: 'DELETE' })
+    setDeleting(false)
+    if (r.ok) { setConfig(null); setUrl(''); setTitle('') }
+    else alert((await r.json()).error ?? 'Erreur lors de la suppression')
+  }
+
   async function saveVideo(videoUrl: string, videoTitle: string) {
     const r = await fetch('/api/admin/video', {
       method: 'PUT',
@@ -204,6 +215,13 @@ export default function AdminPage() {
                 <p className="text-kara-text font-medium">{config.title}</p>
                 <p className="text-kara-muted text-xs mt-1 break-all">{config.url}</p>
                 <p className="text-kara-muted text-xs mt-2">Mis à jour : {new Date(config.updatedAt).toLocaleString('fr-FR')}</p>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="mt-3 text-red-400 text-xs hover:text-red-300 disabled:opacity-50 transition-colors uppercase tracking-widest"
+                >
+                  {deleting ? 'Suppression…' : '✕ Supprimer la vidéo'}
+                </button>
               </div>
             )}
 
