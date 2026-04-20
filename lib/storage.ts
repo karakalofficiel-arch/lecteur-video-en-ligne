@@ -11,38 +11,45 @@ export interface Config {
 export type VideoConfig = Required<Pick<Config, 'url' | 'title' | 'updatedAt'>>
 
 const LOCAL_FILE = join(process.cwd(), '.video-config.json')
-const BLOB_KEY = 'config/karavision-config.json'
 
-function hasBlob() {
-  return !!process.env.BLOB_READ_WRITE_TOKEN
+function hasSupabase() {
+  return !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
 }
 
 export async function getConfig(): Promise<Config> {
-  if (hasBlob()) {
-    const { list } = await import('@vercel/blob')
-    const { blobs } = await list({ prefix: 'config/' })
-    const blob = blobs.find((b) => b.pathname === BLOB_KEY)
-    if (!blob) return {}
-    const res = await fetch(blob.url + '?_=' + Date.now(), { cache: 'no-store' })
-    if (!res.ok) return {}
-    return res.json()
+  if (hasSupabase()) {
+    const { supabaseAdmin } = await import('./supabase')
+    const { data } = await supabaseAdmin()
+      .from('karavision_config')
+      .select('video_url, video_title, updated_at, admin_password_hash')
+      .eq('id', 1)
+      .single()
+    if (!data) return {}
+    return {
+      url: data.video_url ?? undefined,
+      title: data.video_title ?? undefined,
+      updatedAt: data.updated_at ?? undefined,
+      adminPasswordHash: data.admin_password_hash ?? undefined,
+    }
   }
+
   if (!existsSync(LOCAL_FILE)) return {}
-  try {
-    return JSON.parse(readFileSync(LOCAL_FILE, 'utf-8'))
-  } catch {
-    return {}
-  }
+  try { return JSON.parse(readFileSync(LOCAL_FILE, 'utf-8')) }
+  catch { return {} }
 }
 
 export async function saveConfig(config: Config): Promise<void> {
-  if (hasBlob()) {
-    const { put } = await import('@vercel/blob')
-    await put(BLOB_KEY, JSON.stringify(config), {
-      access: 'public',
-      contentType: 'application/json',
-      addRandomSuffix: false,
-    })
+  if (hasSupabase()) {
+    const { supabaseAdmin } = await import('./supabase')
+    await supabaseAdmin()
+      .from('karavision_config')
+      .upsert({
+        id: 1,
+        video_url: config.url ?? null,
+        video_title: config.title ?? null,
+        updated_at: config.updatedAt ?? new Date().toISOString(),
+        admin_password_hash: config.adminPasswordHash ?? null,
+      }, { onConflict: 'id' })
     return
   }
   writeFileSync(LOCAL_FILE, JSON.stringify(config, null, 2))

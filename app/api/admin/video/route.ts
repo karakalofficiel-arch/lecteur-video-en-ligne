@@ -8,9 +8,7 @@ function isAuthenticated(req: NextRequest): boolean {
 }
 
 export async function HEAD(req: NextRequest) {
-  if (!isAuthenticated(req)) {
-    return new Response(null, { status: 401 })
-  }
+  if (!isAuthenticated(req)) return new Response(null, { status: 401 })
   return new Response(null, { status: 200 })
 }
 
@@ -18,19 +16,15 @@ export async function PUT(req: NextRequest) {
   if (!isAuthenticated(req)) {
     return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   }
-
   const { url, title } = await req.json().catch(() => ({}))
-
   if (!url || typeof url !== 'string') {
     return NextResponse.json({ error: 'URL requise' }, { status: 400 })
   }
-
   await setVideoConfig({
     url: url.trim(),
     title: (title ?? '').trim() || 'Vidéo sans titre',
     updatedAt: new Date().toISOString(),
   })
-
   return NextResponse.json({ ok: true })
 }
 
@@ -41,18 +35,19 @@ export async function DELETE(req: NextRequest) {
 
   const config = await getConfig()
 
-  // If the video is stored on Vercel Blob, delete the file too
-  if (config.url?.includes('vercel-storage.com') || config.url?.includes('blob.vercel')) {
+  // Delete from Supabase Storage if the file is hosted there
+  const supabaseUrl = process.env.SUPABASE_URL
+  if (config.url && supabaseUrl && config.url.startsWith(supabaseUrl)) {
     try {
-      const { del } = await import('@vercel/blob')
-      await del(config.url)
+      const { supabaseAdmin } = await import('@/lib/supabase')
+      const path = config.url.split('/storage/v1/object/public/videos/')[1]
+      if (path) await supabaseAdmin().storage.from('videos').remove([path])
     } catch {
-      // Non-blocking — config will be cleared regardless
+      // Non-blocking
     }
   }
 
-  const { url: _url, title: _title, updatedAt: _updatedAt, ...rest } = config
+  const { url: _u, title: _t, updatedAt: _d, ...rest } = config
   await saveConfig(rest)
-
   return NextResponse.json({ ok: true })
 }

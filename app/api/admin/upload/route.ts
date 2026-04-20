@@ -1,40 +1,35 @@
-import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { SESSION_COOKIE, verifySessionToken } from '@/lib/auth'
-
-function isAuthenticated(req: NextRequest): boolean {
-  const token = req.cookies.get(SESSION_COOKIE)?.value
-  return !!token && verifySessionToken(token)
-}
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  if (!isAuthenticated(request)) {
+  const token = request.cookies.get(SESSION_COOKIE)?.value
+  if (!token || !verifySessionToken(token)) {
     return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   }
 
-  const body = (await request.json()) as HandleUploadBody
+  const { filename, contentType } = await request.json().catch(() => ({}))
+  if (!filename) return NextResponse.json({ error: 'filename requis' }, { status: 400 })
 
-  try {
-    const jsonResponse = await handleUpload({
-      body,
-      request,
-      onBeforeGenerateToken: async () => ({
-        allowedContentTypes: [
-          'video/mp4',
-          'video/webm',
-          'video/quicktime',
-          'video/x-m4v',
-          'video/x-matroska',
-        ],
-        maximumSizeInBytes: 2 * 1024 * 1024 * 1024, // 2 GB (requires Vercel Pro)
-        cacheControlMaxAge: 365 * 24 * 60 * 60,  // 1 an — URLs immuables
-      }),
-      onUploadCompleted: async () => {
-        // Intentionally empty — client updates config after upload
-      },
-    })
-    return NextResponse.json(jsonResponse)
-  } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
+  const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const path = `${Date.now()}-${safeName}`
+
+  const { data, error } = await supabaseAdmin()
+    .storage
+    .from('videos')
+    .createSignedUploadUrl(path, { upsert: true })
+
+  if (error || !data) {
+    return NextResponse.json({ error: error?.message ?? 'Erreur Supabase' }, { status: 500 })
   }
+
+  const supabaseUrl = process.env.SUPABASE_URL!
+  const publicUrl = `${supabaseUrl}/storage/v1/object/public/videos/${path}`
+
+  return NextResponse.json({
+    token: data.token,
+    path,
+    publicUrl,
+    uploadUrl: `${supabaseUrl}/storage/v1/upload/resumable`,
+  })
 }

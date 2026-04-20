@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { upload } from '@vercel/blob/client'
 
 type View = 'loading' | 'login' | 'dashboard'
 type UploadMode = 'file' | 'url'
@@ -92,13 +91,41 @@ export default function AdminPage() {
     if (!file) return
     setUploading(true); setUploadProgress(0); setUploadMsg('')
     try {
-      const blob = await upload(`videos/${Date.now()}-${file.name}`, file, {
-        access: 'public',
-        handleUploadUrl: '/api/admin/upload',
-        onUploadProgress: ({ percentage }) => setUploadProgress(Math.round(percentage)),
+      // 1. Get signed upload token from server
+      const r = await fetch('/api/admin/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, contentType: file.type }),
       })
-      // Save as current video
-      await saveVideo(blob.url, title || file.name.replace(/\.[^.]+$/, ''))
+      if (!r.ok) throw new Error((await r.json()).error ?? 'Erreur serveur')
+      const { token, path, publicUrl, uploadUrl } = await r.json()
+
+      // 2. TUS resumable upload direct → Supabase
+      const { Upload } = await import('tus-js-client')
+      await new Promise<void>((resolve, reject) => {
+        const tus = new Upload(file, {
+          endpoint: uploadUrl,
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          headers: { authorization: `Bearer ${token}`, 'x-upsert': 'true' },
+          uploadDataDuringCreation: true,
+          removeFingerprintOnSuccess: true,
+          metadata: {
+            bucketName: 'videos',
+            objectName: path,
+            contentType: file.type,
+            cacheControl: '31536000',
+          },
+          chunkSize: 6 * 1024 * 1024, // 6 Mo par chunk
+          onError: reject,
+          onProgress: (uploaded, total) =>
+            setUploadProgress(Math.round((uploaded / total) * 100)),
+          onSuccess: () => resolve(),
+        })
+        tus.start()
+      })
+
+      // 3. Save as current video
+      await saveVideo(publicUrl, title || file.name.replace(/\.[^.]+$/, ''))
       setFile(null); setUploadMsg('Vidéo mise en ligne avec succès.')
       await loadCurrentVideo()
     } catch (err) {

@@ -3,3 +3,6 @@ node_modules/
 .env
 .env.local
 .video-config.json
+
+.vercel
+.env*.local
