@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAdminPassword, createSessionToken, SESSION_COOKIE } from '@/lib/auth'
+import { getConfig } from '@/lib/storage'
 
 export async function POST(req: NextRequest) {
   const { password } = await req.json().catch(() => ({ password: '' }))
+  const config = await getConfig()
 
-  if (!checkAdminPassword(password)) {
+  if (!checkAdminPassword(password, config.adminPasswordHash)) {
     return NextResponse.json({ error: 'Mot de passe incorrect' }, { status: 401 })
   }
 
@@ -15,7 +17,7 @@ export async function POST(req: NextRequest) {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge: 60 * 60 * 24 * 7,
   })
   return res
 }
