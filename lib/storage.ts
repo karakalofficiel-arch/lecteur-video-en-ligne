@@ -11,28 +11,29 @@ export interface Config {
 export type VideoConfig = Required<Pick<Config, 'url' | 'title' | 'updatedAt'>>
 
 const LOCAL_FILE = join(process.cwd(), '.video-config.json')
+const CONFIG_PATH = 'config/karavision-config.json'
+const BUCKET = 'videos'
 
 function hasSupabase() {
   return !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
 }
 
+async function sb() {
+  const { supabaseAdmin } = await import('./supabase')
+  return supabaseAdmin()
+}
+
 export async function getConfig(): Promise<Config> {
   if (hasSupabase()) {
-    const { supabaseAdmin } = await import('./supabase')
-    const { data } = await supabaseAdmin()
-      .from('karavision_config')
-      .select('video_url, video_title, updated_at, admin_password_hash')
-      .eq('id', 1)
-      .single()
-    if (!data) return {}
-    return {
-      url: data.video_url ?? undefined,
-      title: data.video_title ?? undefined,
-      updatedAt: data.updated_at ?? undefined,
-      adminPasswordHash: data.admin_password_hash ?? undefined,
+    const client = await sb()
+    const { data, error } = await client.storage.from(BUCKET).download(CONFIG_PATH)
+    if (error || !data) return {}
+    try {
+      return JSON.parse(await data.text())
+    } catch {
+      return {}
     }
   }
-
   if (!existsSync(LOCAL_FILE)) return {}
   try { return JSON.parse(readFileSync(LOCAL_FILE, 'utf-8')) }
   catch { return {} }
@@ -40,16 +41,9 @@ export async function getConfig(): Promise<Config> {
 
 export async function saveConfig(config: Config): Promise<void> {
   if (hasSupabase()) {
-    const { supabaseAdmin } = await import('./supabase')
-    await supabaseAdmin()
-      .from('karavision_config')
-      .upsert({
-        id: 1,
-        video_url: config.url ?? null,
-        video_title: config.title ?? null,
-        updated_at: config.updatedAt ?? new Date().toISOString(),
-        admin_password_hash: config.adminPasswordHash ?? null,
-      }, { onConflict: 'id' })
+    const client = await sb()
+    const blob = new Blob([JSON.stringify(config)], { type: 'application/json' })
+    await client.storage.from(BUCKET).upload(CONFIG_PATH, blob, { upsert: true })
     return
   }
   writeFileSync(LOCAL_FILE, JSON.stringify(config, null, 2))
